@@ -19,7 +19,7 @@ Python log file parser that searches for lines matching user-specified patterns,
     - -o, --output — Output file path or directory (auto-names the file if not specified)
 
 ## Examples
-...bash
+```bash
 python3 log_parser.py -f <log_file> -p <patterns> [options]
 
 python3 log_parser.py -f ./tests/resources/example_linux.log -p "Linux and 2.6" -o .
