@@ -1,7 +1,7 @@
 import unittest
 import os
 from log_parser import LogParser
-from log_parser import Matcher, MatcherExpression, MatcherRegex
+from log_parser import MatcherExpression, MatcherRegex
 
 class TestLogParser(unittest.TestCase):
     def setUp(self):

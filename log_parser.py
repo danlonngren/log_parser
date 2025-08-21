@@ -1,8 +1,9 @@
 # python3
 import argparse
 import re
-import logging
 import os
+import logging
+from pathlib import Path
 import datetime
 from typing import List, Optional
 
@@ -109,7 +110,7 @@ class ExpressionParser:
         return token
 
 class Matcher:
-    def matchLine(self, line: str) -> Optional[str]:
+    def match_line(self, line: str) -> Optional[str]:
         raise NotImplementedError("Subclasses should implement this method.")
 
 class MatcherExpression(Matcher):
@@ -117,14 +118,18 @@ class MatcherExpression(Matcher):
     A matcher that supports logical expressions with '&&', '||', and parentheses using keyword-only matching.
     """
     def __init__(self, expressions: List[str], ignore_case=False):
+        self.expressions = expressions
         self.expr_trees = [ExpressionParser(expr).parse() for expr in expressions]
         self.ignore_case = ignore_case
 
-    def matchLine(self, line: str) -> Optional[str]:
+    def match_line(self, line: str) -> Optional[str]:
         for expr_tree in self.expr_trees:
             if expr_tree.evaluate(line, self.ignore_case):
                 return line.rstrip()
         return None
+
+    def get_expression(self) -> str:
+        return self.expressions
 
 class MatcherRegex(Matcher):
     """
@@ -135,31 +140,74 @@ class MatcherRegex(Matcher):
         combined = '|'.join(f'({p})' for p in patterns)
         self.pattern = re.compile(combined, flags)
 
-    def matchLine(self, line: str) -> Optional[str]:
+    def match_line(self, line: str) -> Optional[str]:
         if self.pattern.search(line):
             return line.rstrip()
         return None
+
+    def get_expression(self) -> str:
+        return self.pattern.pattern
+
+class OutputParser:
+    def __init__(self, output_file_path: str, pattern_str: List[str] = None):
+        self.output_file_path = Path(output_file_path) if output_file_path else None
+        self.f = None
+        if self.output_file_path:
+            try:
+                self.f = self.output_file_path.open('a', encoding='utf-8')
+                if pattern_str:
+                    self.f.write("Patterns used: " + ', '.join(pattern_str) + '\n')
+            except Exception as e:
+                logger.error(f"Error opening output file {self.output_file_path}: {e}")
+                self.f = None
+
+    def write_to_file(self, line: str):
+        if self.f:
+            self.f.write(line + '\n')
+        else:
+            print(line)
+
+    def close(self):
+        if self.f:
+            try:
+                self.f.close()
+            except Exception as e:
+                logger.error(f"Error closing output file {self.output_file_path}: {e}")
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
 
 class LogParser:
     """
     A simple log parser that reads a log file and extracts lines containing specified patterns.
     """
-    def parse_log_file(self, file_path: str, matcher: Matcher) -> list[str]:
+    def parse_log_file(self, file_path: str, matcher: Matcher, output_file: str):
         """
-        Parses a log file and returns lines containing any of the specified patterns.
+        Parses a log file any of the specified patterns.
+
+        :param file_path: Path to the log file.
+        :param Matcher: Matcher strategy to use for matching lines.
+        :param output_file: File where output is streamed to.
+        """
+        out_parser = OutputParser(output_file, matcher.get_expression())
+
+        self.linear_search(file_path, matcher, out_parser)       
+
+    def linear_search(self, file_path: str, matcher: Matcher, output_parser: OutputParser) -> list[str]:
+        """
+        Parses a log file using simple lenear stratergy.
 
         :param file_path: Path to the log file.
         :param Matcher: Matcher strategy to use for matching lines.
         :return: List of matching lines.
         """
-        matches = []
-        with open(file_path, 'r', encoding='utf-8') as f:
-            for line in f:
-                match = matcher.matchLine(line)
+        input_path = Path(file_path)
+        with input_path.open('r', encoding='utf-8-sig') as log_f:
+            # Stream lines
+            for line in log_f:
+                match = matcher.match_line(line)
                 if match is not None:
-                    matches.append(match)
-        return matches
-
+                    output_parser.write_to_file(match)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Parse a log file for specific keywords.")
@@ -173,40 +221,39 @@ if __name__ == "__main__":
     log_file = args.file_path
     patterns = args.patterns
     output = args.output
+    output_file = None
         
-    Log_parser = LogParser()
+    log_parser = LogParser()
 
     if args.mode:
         matcher = MatcherRegex(patterns, ignore_case=args.ignore_case)
     else:
         matcher = MatcherExpression(patterns, ignore_case=args.ignore_case)
 
-    # Parse the log file and print matching lines
-    matching_lines = Log_parser.parse_log_file(log_file, matcher)
+    log_file_path = Path(args.file_path)
 
     if output:
-        # Check if output_path is directory (or doesn't exist, treat as directory)
-        if os.path.isdir(output):
+        output_path = Path(output) if output else None
+        if output_path.is_dir():
+            logger.info(f"Output directory {output_path} does not exist. Creating it.")
+            output_path.mkdir(parents=True, exist_ok=True)
+
             os.makedirs(output, exist_ok=True)
-            base_name_without_ext = os.path.splitext(os.path.basename(log_file))[0]
+            basename = log_file_path.stem
 
             # Generate a timestamped file name
             now = datetime.datetime.now()
             date_str = now.strftime("%Y%m%d")
-            midnight = datetime.datetime.combine(now.date(), datetime.time.min)
-            seconds_from_midnight = int((now - midnight).total_seconds())
-            file_name = f"parsed_{base_name_without_ext}_{date_str}_{seconds_from_midnight}.log"
+            seconds_from_midnight = int((now - datetime.datetime.combine(now.date(), datetime.time.min)).total_seconds())
+            file_name = f"parsed_{basename}_{date_str}_{seconds_from_midnight}.log"
 
-            output_file = os.path.join(output + "/" + file_name)
+            output_file = output_path / file_name
         else:
+            logger.info(f"Output path {output} is not a directory. Treating it as a file path.")
             # Treat as file path
             output_file = output
-        
-        with open(output_file, 'w', encoding='utf-8') as f:
-            f.write("Patterns used: " + ', '.join(patterns) + '\n')
-            for line in matching_lines:
-                f.write(line + '\n')
-        logging.info(f"Results written to {output_file}")
     else:
-        for line in matching_lines:
-            print(line)
+        logger.info("No output file specified. Results will not be saved to a file.")
+
+    # Parse the log file and print matching lines
+    matching_lines = log_parser.parse_log_file(log_file, matcher, output_file)
