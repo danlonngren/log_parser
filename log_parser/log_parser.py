@@ -90,7 +90,7 @@ class ExpressionParser:
     def _parse_primary(self) -> ExprNode:
         if self._match('('):
             node = self._parse_or()
-            if not self._expect(')'):
+            if not self._match(')'):
                 raise ValueError("Expected ')'")
             return node
         else:
@@ -191,7 +191,9 @@ class LogParser:
         """
         out_parser = OutputParser(output_file, matcher.get_expression())
 
-        self.linear_search(file_path, matcher, out_parser)       
+        self.linear_search(file_path, matcher, out_parser)
+
+        out_parser.close()      
 
     def linear_search(self, file_path: str, matcher: Matcher, output_parser: OutputParser) -> list[str]:
         """

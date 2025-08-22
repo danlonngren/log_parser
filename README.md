@@ -21,5 +21,11 @@ Python log file parser that searches for lines matching user-specified patterns,
 ## Examples
 ```bash
 python3 log_parser.py -f <log_file> -p <patterns> [options]
-
+```
+```bash
 python3 log_parser.py -f ./tests/resources/example_linux.log -p "Linux and 2.6" -o .
+```
+Run tests
+```bash
+python -m unittest tests.test_log_parser
+```
