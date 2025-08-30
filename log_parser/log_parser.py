@@ -7,7 +7,7 @@ from pathlib import Path
 import datetime
 from typing import List, Optional
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # Define the expression nodes for the parser
@@ -61,8 +61,9 @@ class ExpressionParser:
         expr = re.sub(r'(&&)', r' \1 ', expr)
         expr = re.sub(r'\s+', ' ', expr).strip()
 
-        self.tokens = re.findall(r'!|\|\||&&|\(|\)|[^\s!()|&]+', expr)
+        self.tokens = re.findall(r'"[^"]*"|\!\=|&&|\|\||!|\(|\)|\S+', expr)
         self.pos = 0
+        logger.debug(f"Tokens: {self.tokens}, expr: {expr}")
 
     def parse(self) -> ExprNode:
         return self._parse_or()
@@ -94,7 +95,10 @@ class ExpressionParser:
                 raise ValueError("Expected ')'")
             return node
         else:
-            return KeywordNode(self._consume())
+            token = self._consume()
+            if token.startswith('"') and token.endswith('"'):
+                return KeywordNode(token[1:-1])
+            raise ValueError(f"Unquoted keyword: {token}. Keywords must be wrapped in double quotes.")
 
     def _match(self, token: str) -> bool:
         if self.pos < len(self.tokens) and self.tokens[self.pos] == token:
@@ -165,7 +169,7 @@ class OutputParser:
         if self.f:
             self.f.write(line + '\n')
         else:
-            print(line)
+            logger.info(line)
 
     def close(self):
         if self.f:
@@ -218,13 +222,19 @@ if __name__ == "__main__":
     parser.add_argument('-i','--ignore-case', action='store_true', default=False, help='Specify if case insensitive search is needed')
     parser.add_argument('-r','--mode', action='store_true', default=False, help='Specify if regex mode is needed')
     parser.add_argument('-o','--output', type=str, default=None, help='Specify output file path')
+    parser.add_argument('-d','--debug', action='store_true', default=False, help='Enable or disable logging')
     args = parser.parse_args()
+    
+    if not args.debug:
+        logging.disable(logging.DEBUG)
+
+    logger.debug(f"Patterns received from argparse: {args.patterns}")
 
     log_file = args.file_path
     patterns = args.patterns
     output = args.output
     output_file = None
-        
+
     log_parser = LogParser()
 
     if args.mode:
@@ -237,7 +247,7 @@ if __name__ == "__main__":
     if output:
         output_path = Path(output) if output else None
         if output_path.is_dir():
-            logger.info(f"Output directory {output_path} does not exist. Creating it.")
+            logger.debug(f"Output directory {output_path} does not exist. Creating it.")
             output_path.mkdir(parents=True, exist_ok=True)
 
             os.makedirs(output, exist_ok=True)
@@ -251,11 +261,11 @@ if __name__ == "__main__":
 
             output_file = output_path / file_name
         else:
-            logger.info(f"Output path {output} is not a directory. Treating it as a file path.")
+            logger.debug(f"Output path {output} is not a directory. Treating it as a file path.")
             # Treat as file path
             output_file = output
     else:
-        logger.info("No output file specified. Results will not be saved to a file.")
+        logger.debug("No output file specified. Results will not be saved to a file.")
 
     # Parse the log file and print matching lines
     matching_lines = log_parser.parse_log_file(log_file, matcher, output_file)
