@@ -1,9 +1,9 @@
 # log_parser
-Python log file parser that searches for lines matching user-specified patterns, supporting both logical keyword expressions and regular expressions
+Python log file parser that searches for lines matching user-specified patterns, supporting regular expressions
 
 ## Features
 - **Keyword Matching** with logical operators:
-    - Supports `AND`, `OR`, `NOT`, `&&`, `||`, `!`, and parentheses.
+    - Supports `&&`, `||`, `!`, and parentheses.
     - Example: `"error && !timeout"`, `"Linux || Windows"`, `"(Linux || Windows) and bug"`
     - **Regex Mode** (optional)
 - **Output to File** with timestamped names
@@ -12,20 +12,25 @@ Python log file parser that searches for lines matching user-specified patterns,
 ## Options
 - Required:
     - -f, --file_path — Path to the log file
-    - -p, --patterns — Patterns or expressions to search
+- Exclusive:
+    - -k, --keyword - Simple keyword search (implicit OR)
+    - -e, --expr - Boolean expression: && || ! ( )
+    - -r, --regex - Regex pattern
 - Optional:
     - -i, --ignore-case — Enable case-insensitive matching
-    - -r, --mode — Use regex mode instead of keyword logic
     - -o, --output — Output file path or directory (auto-names the file if not specified)
+    - -d, --debug — Enable debug output
 
 ## Examples
 ```bash
-python3 log_parser.py -f <log_file> -p <patterns> [options]
+python install -e
 ```
+
 ```bash
-python3 log_parser.py -f ./tests/resources/example_linux.log -p "Linux and 2.6" -o .
+log-parser -f <log_file> -e <patterns> [options] -o out
 ```
+
 Run tests
 ```bash
-python -m unittest tests.test_log_parser
+ptest
 ```
